@@ -22,3 +22,10 @@ jobs:
       - run: python scripts/mining/mine_jaxfixbench.py mutations --out-dir data/mined
       - run: python scripts/mining/mine_jaxfixbench.py validate --out-dir data/mined
       - run: python scripts/mining/mine_jaxfixbench.py manifest --out-dir data/mined
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: jaxfixbench-mined
+          path: data/mined
+          if-no-files-found: warn
+          retention-days: 14
