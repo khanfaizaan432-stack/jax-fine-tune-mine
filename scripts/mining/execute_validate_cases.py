@@ -1,16 +1,10 @@
 #!/usr/bin/env python3
-"""Optional executable validation for generated JAXFixBench cases.
-
-The workflow treats this as a quality filter, not as a hard benchmark. If JAX is
-unavailable, the script reports that and keeps the static-passed cases so the
-pipeline remains usable.
-"""
+"""Optional executable validation for generated JAXFixBench cases."""
 
 from __future__ import annotations
 
 import argparse
 import json
-import traceback
 from pathlib import Path
 from typing import Any
 
@@ -40,40 +34,41 @@ def has_jax() -> tuple[bool, str | None]:
         return False, repr(exc)
 
 
-def run_code(code: str, template_name: str, pattern: str) -> tuple[bool, str | None]:
+def run_code(code: str) -> tuple[bool, str | None]:
     try:
         import jax
         import jax.numpy as jnp
         ns: dict[str, Any] = {"jax": jax, "jnp": jnp}
         exec(compile(code, "<jaxfixbench_case>", "exec"), ns, ns)
-        if "update_value" in ns:
-            ns["update_value"](jnp.array([1.0, 2.0, 3.0]))
-        if "boost_prefix" in ns:
-            ns["boost_prefix"](jnp.array([1.0, 2.0, 3.0]))
-        if "fill_diag" in ns:
-            ns["fill_diag"](jnp.zeros((3, 3)))
-        if "choose_sign" in ns:
-            ns["choose_sign"](jnp.array([1.0, -0.5]))
-        if "normalize_or_zero" in ns:
-            ns["normalize_or_zero"](jnp.array([2.0, 0.0]))
-        if "maybe_dropout" in ns:
-            ns["maybe_dropout"](jnp.ones((2,)), True)
-        if "make_range" in ns:
-            ns["make_range"](3)
-        if "flatten_to" in ns:
-            ns["flatten_to"](jnp.ones((2, 3)), 3)
-        if "repeat_add" in ns:
-            ns["repeat_add"](1, 3)
-        if "sample_many" in ns:
-            ns["sample_many"](jax.random.PRNGKey(0))
-        if "sample_step" in ns:
-            ns["sample_step"](jax.random.PRNGKey(0))
-        if "cumulative_sum" in ns:
-            ns["cumulative_sum"](jnp.array([1.0, 2.0, 3.0]))
-        if "decay" in ns:
-            ns["decay"](jnp.array([1.0, 2.0, 3.0]))
-        if "noisy_walk" in ns:
-            ns["noisy_walk"](jax.random.PRNGKey(0), jnp.array([1.0, 2.0, 3.0]))
+        probes = [
+            ("update_value", lambda f: f(jnp.array([1.0, 2.0, 3.0]))),
+            ("boost_prefix", lambda f: f(jnp.array([1.0, 2.0, 3.0]))),
+            ("fill_diag", lambda f: f(jnp.zeros((3, 3)))),
+            ("clamp_positive", lambda f: f(jnp.array([-1.0, 2.0, -3.0]))),
+            ("add_updates", lambda f: f(jnp.zeros((3,)), jnp.array([0, 2]), jnp.array([1.0, 1.0]))),
+            ("choose_sign", lambda f: f(jnp.array([1.0, -0.5]))),
+            ("normalize_or_zero", lambda f: f(jnp.array([2.0, 0.0]))),
+            ("maybe_dropout", lambda f: f(jnp.ones((2,)), True)),
+            ("abs_scalar", lambda f: f(jnp.array(-1.0))),
+            ("relu_bad", lambda f: f(jnp.array([1.0, -1.0]))),
+            ("make_range", lambda f: f(3)),
+            ("flatten_to", lambda f: f(jnp.ones((2, 3)), 3)),
+            ("repeat_add", lambda f: f(1, 3)),
+            ("make_zeros", lambda f: f(3)),
+            ("labels_to_one_hot", lambda f: f(jnp.array([0, 1]), 3)),
+            ("sample_many", lambda f: f(jax.random.PRNGKey(0))),
+            ("sample_step", lambda f: f(jax.random.PRNGKey(0))),
+            ("step_noise", lambda f: f(jax.random.PRNGKey(0), 2)),
+            ("stochastic_pair", lambda f: f(jax.random.PRNGKey(0))),
+            ("cumulative_sum", lambda f: f(jnp.array([1.0, 2.0, 3.0]))),
+            ("decay", lambda f: f(jnp.array([1.0, 2.0, 3.0]))),
+            ("noisy_walk", lambda f: f(jax.random.PRNGKey(0), jnp.array([1.0, 2.0, 3.0]))),
+            ("momentum", lambda f: f(jnp.array([1.0, 2.0, 3.0]))),
+            ("threshold_accum", lambda f: f(jnp.array([1.0, 2.0, 3.0, 4.0]))),
+        ]
+        for name, probe in probes:
+            if name in ns:
+                probe(ns[name])
         return True, None
     except Exception as exc:
         return False, f"{type(exc).__name__}: {exc}"
@@ -102,8 +97,8 @@ def main() -> None:
     passed: list[dict[str, Any]] = []
     reports: list[dict[str, Any]] = []
     for case in cases:
-        fixed_ok, fixed_err = run_code(case.get("fixed_code", ""), case.get("template_name", ""), case.get("pattern", ""))
-        broken_ok, broken_err = run_code(case.get("broken_code", ""), case.get("template_name", ""), case.get("pattern", ""))
+        fixed_ok, fixed_err = run_code(case.get("fixed_code", ""))
+        broken_ok, broken_err = run_code(case.get("broken_code", ""))
         pattern = case.get("pattern", "")
         if pattern in BROKEN_SHOULD_FAIL:
             ok = fixed_ok and not broken_ok
