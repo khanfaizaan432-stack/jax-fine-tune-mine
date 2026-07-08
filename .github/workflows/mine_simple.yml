@@ -24,6 +24,7 @@ jobs:
           python-version: "3.11"
 
       - run: python -m pip install -r requirements-mining.txt
+      - run: python -m pip install -r requirements-finetune-data.txt
 
       - name: Rolling repo discovery
         env:
@@ -37,13 +38,16 @@ jobs:
             --run-offset ${{ github.run_number }} \
             --fallback-to-seen
 
-      - run: python scripts/mining/mine_jaxfixbench.py plan --out-dir data/mined
+      - run: python scripts/mining/rerank_clone_plan.py --out-dir data/mined --per-bucket 50 --min-score 6
       - run: python scripts/mining/mine_jaxfixbench.py clone --out-dir data/mined --max-clones 60
       - run: python scripts/mining/mine_jaxfixbench.py extract --out-dir data/mined
       - run: python scripts/mining/mine_jaxfixbench.py score --out-dir data/mined
       - run: python scripts/mining/mine_jaxfixbench.py patterns --out-dir data/mined
       - run: python scripts/mining/mine_jaxfixbench.py mutations --out-dir data/mined
+      - run: python scripts/mining/diversify_mutations.py --out-dir data/mined --rows-per-template 16
       - run: python scripts/mining/mine_jaxfixbench.py validate --out-dir data/mined
+      - run: python scripts/mining/execute_validate_cases.py --out-dir data/mined
+      - run: cp data/mined/repo_grounded_mutation_cases_v0_2_exec_passed.jsonl data/mined/repo_grounded_mutation_cases_v0_2_passed.jsonl
       - run: python scripts/mining/build_finetune_dataset.py --out-dir data/mined --sft-dir data/sft --max-per-signature 16
       - run: rm -rf data/mined/public_repos
       - run: python scripts/mining/mine_jaxfixbench.py manifest --out-dir data/mined
