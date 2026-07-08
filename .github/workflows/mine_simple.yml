@@ -45,6 +45,7 @@ jobs:
       - run: python scripts/mining/mine_jaxfixbench.py patterns --out-dir data/mined
       - run: python scripts/mining/mine_jaxfixbench.py mutations --out-dir data/mined
       - run: python scripts/mining/diversify_mutations.py --out-dir data/mined --rows-per-template 16
+      - run: python scripts/mining/augment_mutations.py --out-dir data/mined --rows-per-template 16
       - run: python scripts/mining/mine_jaxfixbench.py validate --out-dir data/mined
       - run: python scripts/mining/execute_validate_cases.py --out-dir data/mined
       - run: cp data/mined/repo_grounded_mutation_cases_v0_2_exec_passed.jsonl data/mined/repo_grounded_mutation_cases_v0_2_passed.jsonl
