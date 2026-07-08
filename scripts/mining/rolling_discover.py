@@ -11,7 +11,6 @@ from __future__ import annotations
 import argparse
 import json
 import os
-import sys
 import time
 from collections import defaultdict
 from pathlib import Path
@@ -51,7 +50,7 @@ BUCKETS: dict[str, list[str]] = {
 
 def gh_headers() -> dict[str, str]:
     headers = {"Accept": "application/vnd.github+json", "X-GitHub-Api-Version": "2022-11-28"}
-    token = os.environ.get("GITHUB_TOKEN")
+    token = os.environ.get("GITHUB_TOKEN") or os.environ.get("GH_PAT") or os.environ.get("GH_TOKEN")
     if token:
         headers["Authorization"] = f"Bearer {token}"
     return headers
@@ -122,8 +121,6 @@ def main() -> None:
     skipped_seen: list[str] = []
     errors: list[dict[str, Any]] = []
     fresh_by_bucket: dict[str, list[str]] = defaultdict(list)
-
-    # Rotate pages per run. GitHub search returns at most 1000 results, so keep it bounded.
     max_start_page = 8
     page_offset = (args.run_offset % max_start_page) * args.max_pages_per_query
 
@@ -135,7 +132,6 @@ def main() -> None:
                 break
             start_page = 1 + ((page_offset + query_i * args.max_pages_per_query) % max_start_page)
             pages = list(range(start_page, start_page + args.max_pages_per_query))
-            # Also add page 1 as a fallback source; seen-filtering keeps it from repeating usually.
             if 1 not in pages:
                 pages.append(1)
             for page in pages:
@@ -153,8 +149,7 @@ def main() -> None:
                 resp.raise_for_status()
                 for item in resp.json().get("items", []):
                     repo = item["full_name"]
-                    size_kb = item.get("size") or 0
-                    if size_kb > 300_000:
+                    if (item.get("size") or 0) > 300_000:
                         continue
                     row = normalize_repo(item, bucket, query)
                     if repo in seen_before:
@@ -186,12 +181,10 @@ def main() -> None:
     rows = sorted(repo_map.values(), key=lambda r: r.get("stars") or 0, reverse=True)
     write_jsonl(out / "repo_candidates_checkpoint.jsonl", rows)
     write_jsonl(out / "repo_candidates_final.jsonl", rows)
-
     seen_after = sorted(seen_before | {row["repo"] for row in rows})
     if seen_path:
         seen_path.parent.mkdir(parents=True, exist_ok=True)
         write_json(seen_path, {"repos": seen_after})
-
     report = {
         "selected_repos": len(rows),
         "seen_before": len(seen_before),
